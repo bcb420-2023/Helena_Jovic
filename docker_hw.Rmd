@@ -1,0 +1,31 @@
+---
+title: "Docker Homework"
+output: html_notebook
+---
+
+Create a 5 by 10 matrix of random integers
+```{r}
+x <- matrix(runif(50, 1, 100), ncol=10, nrow=5)
+```
+
+Define column names as cond1, cond2, cond3, cond4, cond5, ctrl1, ctrl2, ctrl3, ctrl4, ctrl5
+```{r}
+colnames(x) <- c("cond1", "cond2", "cond3", "cond4", "cond5", 
+                 "ctrl1", "ctrl2", "ctrl3", "ctrl4", "ctrl5")
+```
+
+Define row names as gene1, gene2, gene3 ...
+```{r}
+rownames(x) <- c("gene1", "gene2", "gene3", "gene4", "gene5")
+x
+```
+
+Compute the fold change for each gene.
+```{r}
+logfoldchange <- c()
+for (i in seq(nrow(x))){
+    logfoldchange[i] <- log2(mean(x[i,1:5])/
+                                 mean(x[i,6:10]))
+}
+logfoldchange
+```
