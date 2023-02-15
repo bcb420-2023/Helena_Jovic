@@ -1,0 +1,498 @@
+---
+title: "A1: Dataset Selection and Initial Processing"
+author: "Helena Jovic"
+date: "February 14th, 2023"
+output:
+  html_document:
+    toc: true
+    theme: united
+    df_print: paged
+---
+
+# 1 Set-Up
+
+### 1.1 Dependencies
+
+Install all necessary packages
+
+```{r message=FALSE, warning=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")}
+
+options(repos = c(CRAN = "https://cran.r-project.org"))
+
+if (!requireNamespace("GEOquery", quietly = TRUE)) {
+  install.packages("GEOquery")}
+
+if (!requireNamespace("biomaRt", quietly = TRUE)) {
+  install.packages("biomaRt")}
+
+if (!requireNamespace("edgeR", quietly = TRUE)) {
+  install.packages("edgeR")}
+
+if (!requireNamespace("DBI", quietly = TRUE)) {
+  install.packages("DBI")}
+
+if (!requireNamespace("limma", quietly = TRUE)) {
+  install.packages("limma")}
+
+if(!requireNamespace("dplyr", quietly=TRUE)) {
+  install.packages("dplyr")}
+```
+
+Load all necessary packages
+
+```{r message=FALSE, warning=FALSE}
+library(BiocManager)
+library(GEOquery)
+library(biomaRt)
+library(edgeR)
+library(DBI)
+library(limma)
+library(dplyr)
+```
+
+### 1.2 Download Dataset
+
+Retrieve data from the Gene Expression Omnibus (GEO) database with the ID "GSE184320"
+
+```{r message=FALSE, warning=FALSE}
+my_id <- "GSE184320"
+gse <- getGEO(my_id,GSEMatrix=FALSE)
+```
+
+### 1.3 Get Expression Data
+
+Download the supplementary file associated with the GEO dataset that ends in ".txt".
+
+```{r}
+# extract only file with .txt extension
+files <- getGEOSuppFiles("GSE184320", makeDirectory = TRUE, baseDir = getwd(),
+                         fetch_files = TRUE, filter_regex = ".txt")
+
+fnames = rownames(files)
+
+# assuming you want to access the first .txt file
+cd45_exp <- read.delim(fnames[1], header = TRUE, check.names = FALSE)
+```
+
+# 2 About the Dataset
+
+### 2.1 Summary of Experiment
+
+The experiment describes the impact of antiretroviral therapy (ART) on skin tissue-resident memory T (Trm) cells in people living with HIV (PLWH). The authors found that late ART initiation leads to permanent depletion of skin CD4+ Trm cells, while early ART can reconstitute the pool of Trm cells lost in early HIV infection. They also found that PLWH receiving late ART treatment had a loss of CXCR3+ Trm cells and a tolerogenic skin immune environment. Additionally, HPV-induced precancerous lesion biopsies showed reduced CXCR3+ Trm cell frequencies in the mucosa in PLWH compared to HIV-negative individuals. These findings suggest that the irreversible loss of CXCR3+ Trm cells in skin and mucosa of PLWH who received late ART treatment may be a contributing factor in the development of HPV-related cancer.
+
+### 2.2 Description of Dataset
+
+| Title               | Loss of skin and mucosal CXCR3+ resident memory T cells causes irreversible tissue-confined immunodeficiency in HIV                                                                                                                                                                                                                                    |
+|:-----------|:-----------------------------------------------------------|
+| **Organism**        | [Homo sapiens](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/Taxonomy/Browser/wwwtax.cgi?mode=Info&id=9606)                                                                                                                                                                                                                                           |
+| **Experiment type** | Expression profiling by high throughput sequencing                                                                                                                                                                                                                                                                                                     |
+| **Summary**         | Single cell RNA-seq , VDJ DNA sequencing and Bulk RNA-seq sequencing of human skin and blood CD45+ cells from HIV+ patients and healthy controls                                                                                                                                                                                                       |
+| **Overall design**  | For Bulk RNA-seq, we isolated total RNA from skin biopsies and PBMCs. For single cell RNA seq coupled with VDJ DNA Seq, we isolated CD45+ Skin single cells and CD45+ blood PBMCs. Raw data not provided due to patient confidentiality.                                                                                                               |
+| **Contributor(s)**  | [Saluzzo S](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/?term=Saluzzo%20S%5BAuthor%5D), [Pandey RV](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/?term=Pandey%20RV%5BAuthor%5D), [Stary G](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/?term=Stary%20G%5BAuthor%5D)                                                       |
+| **Citation(s)**     | Saluzzo S, Pandey RV, Gail LM, Dingelmaier-Hovorka R et al. Delayed antiretroviral therapy in HIV-infected individuals leads to irreversible depletion of skin- and mucosa-resident memory T cells. Immunity 2021 Dec 14;54(12):2842-2858.e5. PMID: [34813775](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/34813775 "Link to PubMed record") |
+
+| **Number of Samples** | 28    |
+|:----------------------|:------|
+| **Number of Genes**   | 58395 |
+
+### 2.3 Information about Platform
+
+```{r}
+current_gpl <- names(GPLList(gse))[1]
+current_gpl_info <- Meta(getGEO(current_gpl))
+```
+
+| **Platform Title**         | Illumina HiSeq 4000 (Homo sapiens) |
+|:---------------------------|:-----------------------------------|
+| **Submission Date**        | Jun 09 2015                        |
+| **Last Update Date**       | Mar 21 2019                        |
+| **Organism**               | Homo sapiens                       |
+| **Number of GEO Datasets** | 6931                               |
+| **Number of GEO Samples**  | 159844                             |
+
+### 2.4 Contributions
+
+The skin is an important barrier against infections and cancer, and it is protected by a type of immune cells called resident memory T (Trm) cells. These cells are important for fighting infections and preventing cancer in the skin. People with HIV can have a weakened immune system, which puts them at a higher risk for certain types of cancer, including skin and mucosal cancers.
+
+The study found that people with HIV who were diagnosed late (when their immune system was already weak) had a permanent reduction in the number of Trm cells in their skin, even if they were taking medicine to treat their HIV. However, people who were diagnosed and started treatment earlier had a temporary reduction in Trm cells, but they eventually reconstituted (rebuilt) their Trm cell population.
+
+This highlights the importance of early diagnosis and treatment of HIV in order to prevent skin-confined immunodeficiency and reduce the risk of HPV-related malignancies.
+
+# 3 Cleaning the Data
+
+There is a total of 58395 genes.
+
+```{r echo=TRUE}
+nrow(cd45_exp)
+```
+
+There are no rows with missing values.
+
+```{r}
+# Check if there are any rows with missing values
+any(!complete.cases(cd45_exp))
+```
+
+### 3.1 Define the Groups
+
+The data represents the expression levels of genes in human skin and blood CD45+ cells from HIV+ patients and healthy controls (HIV-). The columns in the data correspond to different samples, which include a combination of bulk RNA-seq and single cell RNA-seq. The columns are named according to the patient, HC = Healthy Control or A = HIV+, and the type of tissue, skin or peripheral blood mononuclear cells (PBMCs), along with a numerical identifier, 1 to 6.
+
+I've identified 3 groups:
+
+1.  Healthy controls with CD45+ cell sample from skin
+2.  HIV+ patients with CD45+ cell sample from skin
+3.  HIV+ patients with CD45+ cell sample from PBMCs
+
+```{r echo=FALSE}
+colnames(cd45_exp)
+```
+
+```{r}
+samples <- data.frame(lapply(colnames(cd45_exp)[3:18], 
+        FUN=function(x){unlist(strsplit(x, 
+                        split = "\\_"))[c(1,2,3)]}))
+colnames(samples) <- colnames(cd45_exp)[3:18]
+rownames(samples) <- c("patient","identifier", "cell_type")
+samples <- data.frame(t(samples))
+samples
+```
+
+### 3.2 Low Count Genes
+
+Here we summarize genes with a count greater than 1.
+
+```{r}
+summarized_gene_counts <- sort(table(cd45_exp$HGNC), decreasing = TRUE)
+gene_counts_gt_1 <- summarized_gene_counts[which(summarized_gene_counts > 1)]
+```
+
+According to the `edgeR` protocol, it is advisable to exclude features that have low expression levels or do not provide useful information. A feature is considered weakly expressed or non-informative if it has less than one read per million across at least n samples, where n is the size of the smallest group of biological replicates. Since there are at most 5 patients in each of the three identified groups in this particular dataset, the value of n is 5.
+
+```{r}
+#translate out counts into counts per million using 
+cpms = cpm(cd45_exp[,3:18])
+rownames(cpms) <- cd45_exp[,1]
+# get rid of low counts
+keep = rowSums(cpms > 1) >= 5
+cd45_exp_filtered = cd45_exp[keep,]
+```
+
+The new gene count is 12565 (21.5% of the original dataset).
+
+```{r}
+nrow(cd45_exp_filtered)
+```
+
+In total, 45830 genes have been excluded due to low count
+
+```{r}
+nrow(cd45_exp) - nrow(cd45_exp_filtered)
+```
+
+### 3.4 Identifier Mapping
+
+This dataset already includes a column "HGNC" that contains the HUGO gene symbols for each row. We will check if the rows are matched to the same HUGO gene symbols using *ensembl* as a tool for identifier mapping.
+
+```{r}
+# Connect to the desired mart
+ensembl <- biomaRt::useMart("ensembl")
+
+# Get the set of datasets availble
+datasets <- biomaRt::listDatasets(ensembl)
+
+# Connect to Ensembl version 92
+ensembl <- useMart("ensembl", dataset="hsapiens_gene_ensembl", host="https://jul2019.archive.ensembl.org")
+
+# Limit to the human datasets availble
+#ensembl <- biomaRt::useDataset("hsapiens_gene_ensembl", mart=ensembl)
+
+conversion_stash <- "tcell_id_conversion.rds"
+
+if (file.exists(conversion_stash)) {
+  tcell_id_conversion <- readRDS(conversion_stash)
+} else {
+  tcell_id_conversion <- biomaRt::getBM(attributes = c("ensembl_gene_id","hgnc_symbol"), 
+                                      filters = c("ensembl_gene_id"), 
+                                      values = cd45_exp_filtered$Ensembl_ID,
+                                      mart = ensembl)
+  saveRDS(tcell_id_conversion, conversion_stash)
+}
+```
+
+```{r}
+annot_tcell_exp <- cd45_exp_filtered %>%
+  left_join(tcell_id_conversion, by = c("HGNC" = "hgnc_symbol"), keep = TRUE)
+annot_tcell_exp <- annot_tcell_exp %>% select(hgnc_symbol, HGNC, Ensembl_ID, HC_1_SKIN,  "HC_2_SKIN",  "HC_3_SKIN",  "HC_4_SKIN",  "HC_5_SKIN",  "A_1_SKIN",   "A_2_SKIN",   "A_3_SKIN",   "A_4_SKIN", "A_5_SKIN",   "A_6_SKIN",   "A_2_PBMC",   "A_3_PBMC",   "A_4_PBMC",   "A_5_PBMC",   "A_6_PBMC")
+annot_tcell_exp
+```
+
+There are 491 identifiers that are not matched to current HUGO mapping, which is 3.9% of the total number of genes.
+
+```{r}
+# Count the number of rows with missing values
+sum(!complete.cases(annot_tcell_exp))
+```
+
+```{r}
+nrow(annot_tcell_exp)
+```
+
+```{r}
+(491 / 12567) * 100
+```
+
+After a brief overview of the symbols that were not mapped, I noticed that many of the genes are aliases or gene synonyms of a gene symbol on `ensembl` and that many of the genes mapped in the HGNC column have version numbers which could have contributed to the mismatch.
+
+```{r}
+# Get the row indices that contain NA values
+rows_with_na <- which(apply(is.na(annot_tcell_exp), 1, any))
+
+# Print the rows that contain NA values
+annot_tcell_exp[rows_with_na, ]
+```
+
+Removing all unidentified rows from dataframe.
+
+```{r}
+annot_tcell_exp_clean <- na.omit(annot_tcell_exp)
+```
+
+### 3.5 Gene Duplicates
+
+There are 3 genes that map to the same HGNC symbol (CYB561D2 has 2 duplicates, HSPA14 has 4 duplicates, COG8 has 2 duplicates. I have decided to keep them in the dataset, to not harm the analysis. Removing duplicates can introduce differences where they don't exist and potential bias on some algorithms.
+
+```{r}
+# Get the duplicate genes
+duplicate_genes <- annot_tcell_exp_clean$hgnc_symbol[duplicated(annot_tcell_exp_clean$hgnc_symbol)]
+
+# Filter the data frame to show only the duplicate genes
+duplicate_rows <- subset(annot_tcell_exp_clean, hgnc_symbol %in% duplicate_genes)
+
+# Print the duplicate rows
+duplicate_rows
+```
+
+```{r}
+nrow(duplicate_rows)
+```
+
+# 4 Data Normalization
+
+### 4.1 TMM
+
+```{r}
+original_tcell_exp <- annot_tcell_exp
+
+df_original_tcell_exp <- as.data.frame(original_tcell_exp[1:5, 1:18])
+```
+
+Next, the TMM normalization technique is used for RNASeq with the *edgeR* package.
+
+```{r}
+count_data <- annot_tcell_exp_clean[2:11895,4:19]
+```
+
+Create the DGEList object using the count data.
+
+```{r}
+dge <- DGEList(counts = count_data)
+```
+
+Normalize the data to correct for any systemic differences in library size or sequencing depth between samples.
+
+```{r}
+dge <- calcNormFactors(dge)
+```
+
+Estimate the common dispersion.
+
+```{r}
+dge <- estimateCommonDisp(dge)
+```
+
+Estimate the tagwise dispersion.
+
+```{r}
+dge <- estimateTagwiseDisp(dge)
+```
+
+```{r}
+# Create an edgeR container for RNASeq count data
+original_data_matrix <- as.matrix(original_tcell_exp[,4:19])
+rownames(original_data_matrix) <- original_tcell_exp$HGNC
+
+# Calculate the normalization factors
+d <- edgeR::DGEList(counts = original_data_matrix)
+d <- edgeR::calcNormFactors(d)
+
+normalized_tcell_exp <- edgeR::cpm(d)
+normalized_tcell_exp <- cbind(original_tcell_exp[, 1:2], normalized_tcell_exp)
+rownames(normalized_tcell_exp) <- NULL
+
+df_normalized_tcell_exp <- as.data.frame(normalized_tcell_exp)
+df_normalized_tcell_exp
+```
+
+### 4.2 Boxplot
+
+```{r message=FALSE, warning=FALSE}
+data2plot <- log2(cpm(cd45_exp_filtered[,3:18]))
+boxplot(data2plot, xlab = "Samples", ylab = "log2 CPM", 
+        las = 2, cex = 0.5, cex.lab = 0.5,
+        cex.axis = 0.5, main = "CD45 RNASeq Samples - Original")
+#draw the median on each box plot
+abline(h = median(apply(data2plot, 2, median)), 
+       col = "green", lwd = 0.6, lty = "dashed")
+```
+
+```{r message=FALSE, warning=FALSE}
+data2plot <- log2(cpm(normalized_tcell_exp[,3:18]))
+boxplot(data2plot, xlab = "Samples", ylab = "log2 CPM", 
+        las = 2, cex = 0.5, cex.lab = 0.5,
+        cex.axis = 0.5, main = "CD45 RNASeq Samples - Normalized")
+#draw the median on each box plot
+abline(h = median(apply(data2plot, 2, median)), 
+       col = "green", lwd = 0.6, lty = "dashed")
+```
+
+### 4.3 Density plot
+
+```{r message=FALSE, warning=FALSE}
+counts_density <- apply(log2(cpm(cd45_exp_filtered[,3:18])), 
+                        2, density)
+  #calculate the limits across all the samples
+    xlim <- 0; ylim <- 0
+    for (i in 1:length(counts_density)) {
+      xlim <- range(c(xlim, counts_density[[i]]$x)); 
+      ylim <- range(c(ylim, counts_density[[i]]$y))
+    }
+    cols <- rainbow(length(counts_density))
+    ltys <- rep(1, length(counts_density))
+    #plot the first density plot to initialize the plot
+    plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n", 
+         ylab="Smoothing density of log2-CPM", 
+         main="", cex.lab = 0.85)
+    #plot each line
+    for (i in 1:length(counts_density)) 
+      lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+    #create legend
+    legend("topright", colnames(data2plot),  
+           col=cols, lty=ltys, cex=0.75, 
+           border ="blue",  text.col = "green4", 
+           merge = TRUE, bg = "gray90")
+```
+
+```{r message=FALSE, warning=FALSE}
+counts_density <- apply(log2(cpm(normalized_tcell_exp[,3:18])), 
+                        2, density)
+  #calculate the limits across all the samples
+    xlim <- 0; ylim <- 0
+    for (i in 1:length(counts_density)) {
+      xlim <- range(c(xlim, counts_density[[i]]$x)); 
+      ylim <- range(c(ylim, counts_density[[i]]$y))
+    }
+    cols <- rainbow(length(counts_density))
+    ltys <- rep(1, length(counts_density))
+    #plot the first density plot to initialize the plot
+    plot(counts_density[[1]], xlim=xlim, ylim=ylim, type="n", 
+         ylab="Smoothing density of log2-CPM - Normalized", 
+         main="", cex.lab = 0.85)
+    #plot each line
+    for (i in 1:length(counts_density)) 
+      lines(counts_density[[i]], col=cols[i], lty=ltys[i])
+    #create legend
+    legend("topright", colnames(data2plot),  
+           col=cols, lty=ltys, cex=0.75, 
+           border ="blue",  text.col = "green4", 
+           merge = TRUE, bg = "gray90")
+```
+
+### 4.3 MDS Plot
+
+```{r}
+limma::plotMDS(original_tcell_exp[, 4:19], 
+               labels = rownames(samples), 
+               col = c("darkgreen", "red")[factor(samples$cell_type)],
+               main = "MDS Plot - Original")
+```
+
+```{r}
+limma::plotMDS(normalized_tcell_exp[,3:18],
+               labels = rownames(samples), 
+               col = c("darkgreen", "red")[factor(samples$cell_type)],
+               main = "MDS Plot - Normalized")
+```
+
+# 5 Interpret and Document
+
+### 5.1 Questions
+
+**What are the control and test conditions of the dataset?**
+
+The control condition in this dataset is the skin of healthy, HIV-negative controls (patient = HC, cell_type = SKIN . The test conditions are the skin samples of two cohorts of people living with HIV (PLWH): HIV "late ART" (HIVLA) and HIV "early ART" (HIVEA) (patient = A, cell_type = SKIN and cell_type = PBMC).
+
+More information on the experiment can be found at [2.1 Summary of Experiment]
+
+**Why is the dataset of interest to you?**
+
+The skin is an important barrier against infections and cancer, and it is protected by a type of immune cells called resident memory T (Trm) cells. These cells are important for fighting infections and preventing cancer in the skin. People with HIV can have a weakened immune system, which puts them at a higher risk for certain types of cancer, including skin and mucosal cancers.
+
+The study found that people with HIV who were diagnosed late (when their immune system was already weak) had a permanent reduction in the number of Trm cells in their skin, even if they were taking medicine to treat their HIV. However, people who were diagnosed and started treatment earlier had a temporary reduction in Trm cells, but they eventually reconstituted (rebuilt) their Trm cell population.
+
+This highlights the importance of early diagnosis and treatment of HIV in order to prevent skin-confined immunodeficiency and reduce the risk of HPV-related malignancies.
+
+From [2.4 Contributions]
+
+**Were there expression values that were not unique for specific genes? How did you handle these?**
+
+Yes, there are 3 `Ensembl_IDs` that map to the same HGNC symbol (CYB561D2 has 2 duplicates, HSPA14 has 4 duplicates, COG8 has 2 duplicates. I have decided to keep them in the dataset, to not harm the analysis. Removing duplicates can introduce differences where they don't exist and potential bias on some algorithms.
+
+The workflow can be found at [3.5 Gene Duplicates]
+
+**Were there expression values that could not be mapped to current HUGO symbols?**
+
+Yes, here are 491 identifiers that are not matched to current HUGO mapping, which is 3.9% of the total number of genes (not including genes of low count).
+
+The workflow can be found at [3.4 Identifier Mapping]
+
+**How many outliers were removed?**
+
+No outliers were removed from the dataset. Original and normalized boxplots and density plots did not show significant variation to indicate the presence of any outliers.
+
+The plots can be found at [4 Data Normalization]
+
+**How did you handle replicates?**
+
+There are a maximum of 5 biological replicates for each of the three conditions in which the samples are tested. I grouped the replicates under the conditions they were tested in.
+
+The workflow can be found at [3.1 Define the Groups]
+
+**What is the final coverage of your dataset?**
+
+A total of 46500 genes were removed from the dataset. The final dataset represents 20% of the original dataset. The number of samples remains 16.
+
+| Gene Count Original | Gene Count Cleaned |
+|:--------------------|:-------------------|
+| 58395               | 11895              |
+
+The workflow can be found at [3 Cleaning the Data]
+
+### 5.2 References
+
+Davis, S. and Meltzer, P. S. GEOquery: a bridge between the Gene Expression Omnibus (GEO) and BioConductor. Bioinformatics, 2007, 14, 1846-1847
+
+Mapping identifiers for the integration of genomic datasets with the R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+
+Morgan M (2022). \_BiocManager: Access the Bioconductor Project Package Repository\_. R package version 1.30.19
+
+Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., and Smyth, G.K. (2015). limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47.
+
+Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics 26, 139-140
+
+R Special Interest Group on Databases (R-SIG-DB), Wickham H, Müller K (2022). \_DBI: R Database Interface\_. R package version 1.1.3, <https://CRAN.R-project.org/package=DBI.>
+
+Saluzzo S, Pandey RV, Gail LM, Dingelmaier-Hovorka R et al. Delayed antiretroviral therapy in HIV-infected individuals leads to irreversible depletion of skin- and mucosa-resident memory T cells. Immunity 2021 Dec 14;54(12):2842-2858.e5. PMID: [34813775](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/34813775 "Link to PubMed record")
+
+Wickham H, François R, Henry L, Müller K, Vaughan D (2023). \_dplyr: A Grammar of Data Manipulation\_. R package version 1.1.0, <https://CRAN.R-project.org/package=dplyr.>
