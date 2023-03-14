@@ -1,0 +1,519 @@
+---
+title: "A2: Differential Gene Expression and Preliminary ORA"
+author: "Helena Jovic"
+date: "March 3rd, 2023"
+output:
+  html_document:
+    toc: true
+    theme: united
+    df_print: paged
+---
+
+# Introduction
+
+**What has been done so far?**
+
+In the previous assignment, I sourced, cleaned and normalized dataset [GSE184320](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/geo/query/acc.cgi?acc=GSE184320). This data is used in the study "Loss of skin and mucosal CXCR3+ resident memory T cells causes irreversible tissue-confined immunodeficiency in HIV". This data Includes 16 CD45+ cell samples sorted by type of tissue: skin and peripheral blood mononuclear cells. After cleaning, mapping and normalizing the data, 20% of the original data set remains for a total of 11895 genes.
+
+**Summary of experiment**
+
+The experiment describes the impact of antiretroviral therapy (ART) on skin tissue-resident memory T (Trm) cells in people living with HIV (PLWH). The authors found that late ART initiation leads to permanent depletion of skin CD45+ Trm cells, while early ART can reconstitute the pool of Trm cells lost in early HIV infection. They also found that PLWH receiving late ART treatment had a loss of CXCR3+ Trm cells and a tolerogenic skin immune environment. Additionally, HPV-induced precancerous lesion biopsies showed reduced CXCR3+ Trm cell frequencies in the mucosa in PLWH compared to HIV-negative individuals. These findings suggest that the irreversible loss of CXCR3+ Trm cells in skin and mucosa of PLWH who received late ART treatment may be a contributing factor in the development of HPV-related cancer.
+
+**Reference to paper relevant to dataset**
+
+Saluzzo S, Pandey RV, Gail LM, Dingelmaier-Hovorka R et al. Delayed antiretroviral therapy in HIV-infected individuals leads to irreversible depletion of skin- and mucosa-resident memory T cells. Immunity 2021 Dec 14;54(12):2842-2858.e5. PMID: [34813775](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/34813775 "Link to PubMed record")
+
+**Goal of this assignment**
+
+For Assignment 2, the goal is to identify the pathways that are linked with genes that are significantly upregulated or downregulated in PLWH. To start we will import the normalized data and install and load all dependencies for the analysis.
+
+**Load dependencies**
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+    install.packages("BiocManager")}
+
+options(repos = c(CRAN = "https://cran.r-project.org"))
+
+if (!requireNamespace("knitr", quietly = TRUE)) {
+    install.packages("knitr")}
+library(knitr)
+
+if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
+BiocManager::install("ComplexHeatmap")}
+library("ComplexHeatmap")
+
+if (!requireNamespace("circlize", quietly = TRUE)) {
+    install.packages("circlize")}
+library(circlize)
+
+if (!requireNamespace("biomaRt", quietly = TRUE)) {
+library(biomaRt)}
+
+if (!requireNamespace("kableExtra", quietly = TRUE)) {
+library(kableExtra)}
+
+if (!requireNamespace("gprofiler2", quietly = TRUE)) {
+library(gprofiler2)}
+
+if (!requireNamespace("limma", quietly = TRUE)) {
+library(limma)}
+
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+library(ggplot2)}
+
+if (!requireNamespace("Biobase", quietly = TRUE)) {
+library(Biobase)}
+
+if (!requireNamespace("edgeR", quietly = TRUE)) {
+library(edgeR)}
+```
+
+**Load normalized data**
+
+Data from Assignment 1 is saved as CSV file and included in Assignment 2 directory.
+
+```{r}
+normalized_count_data <- read.csv("normalized_data.csv")
+normalized_count_data
+```
+
+**Table 1.** Processed count data used for the current analysis. The data is composed of 12,565 genes and 16 samples, where each gene is identified by a unique HUGO symbol and Ensembl ID.
+
+# Differential Gene Expression
+
+### Heatmap without p-value cutoffs
+
+First, we conduct differential expression analysis with this normalized expression set. We prepare for creating a heatmap and downstream analysis with a heatmap matrix.
+
+```{r}
+heatmap_matrix <- normalized_count_data[,
+ 4:ncol(normalized_count_data)]
+rownames(heatmap_matrix) <- normalized_count_data$Ensembl_ID
+colnames(heatmap_matrix) <- colnames(normalized_count_data[,
+ 4:ncol(normalized_count_data)])
+```
+
+**Table 2.** Heatmap matrix of normalized expression set
+
+We visualize the top hits using a heatmap. As we can see below, the conditions do cluster together. This is reassuring, as it shows that the expression differences in our top hits are truly associated with the their tissue type.
+
+**Scale the heatmap matrix**
+
+```{r}
+# scale the heatmap by applying row-normalization
+heatmap_matrix_scaled <- t(scale(t(heatmap_matrix)))
+```
+
+```{r}
+if(min(heatmap_matrix_scaled) == 0){
+    heatmap_col = colorRamp2(c( 0, max(heatmap_matrix_scaled)), c( "white", "red"))
+  } else {
+    heatmap_col = colorRamp2(c(min(heatmap_matrix_scaled), 0, max(heatmap_matrix_scaled)), c("blue", "white", "red"))
+  }
+current_heatmap <- Heatmap(as.matrix(heatmap_matrix_scaled),
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE, 
+                               col=heatmap_col,
+                           use_raster = FALSE,
+                               show_column_names = TRUE, 
+                               show_row_names = FALSE,
+                               show_heatmap_legend = TRUE
+                               )
+current_heatmap
+```
+
+**Figure 1.** Heatmap of non-adjusted gene expression values to visualize top hits and clustering
+
+### Define groups
+
+Based on the previously generated MDS in Assignment 1, the tissue type of CD45+ cells, specifically SKIN and PBMC seem to cluster more than any other factors. As such, tissue type is the factor we will consider in our model. We can visualize this using the plotMDS function from the limma package.
+
+**Visualize MDS plot**
+
+```{r}
+pat_colors <- rainbow(10)
+pat_colors <- unlist(lapply(pat_colors,FUN=function(x){rep(x,2)}))
+limma::plotMDS(heatmap_matrix,
+               col = pat_colors )
+```
+
+**Figure 2.** MDS plot to visualize potential groups
+
+Then as we prepare to calculate p-values and apply multiple hypothesis testing, we define the groups in the sample data and create a model.
+
+**Define groups**
+
+```{r}
+samples <- data.frame(lapply(colnames(heatmap_matrix)[1:16], 
+        FUN=function(x){unlist(strsplit(x, 
+                        split = "\\_"))[c(1,2,3)]}))
+colnames(samples) <- colnames(heatmap_matrix)[1:16]
+rownames(samples) <- c("patient","identifier", "tissue_type")
+samples <- data.frame(t(samples))
+samples
+```
+
+**Table 3.** Grouping data by tissue type
+
+### Create data matrix
+
+```{r}
+model_design <- model.matrix(~ samples$tissue_type)
+model_design
+```
+
+**Table 4.** Data matrix following model
+
+```{r}
+expressionMatrix <- as.matrix(normalized_count_data[,4:19])
+rownames(expressionMatrix) <-
+  normalized_count_data$Ensembl_ID
+colnames(expressionMatrix) <-
+  colnames(normalized_count_data)[4:19]
+minimalSet <- Biobase::ExpressionSet(assayData=expressionMatrix)
+```
+
+**Fit the data to our data matrix**
+
+```{r}
+fit <- limma::lmFit(minimalSet, model_design)
+```
+
+### Compute differential expression
+
+To analyze the data, we use empirical Bayes with trend=TRUE since it is RNASeq data. To make sure these results were reliable, I corrected for multiple hypotheses using the Benjamini-Hochberg method. I chose this method because it's better minimizing false positives, which is critical in clinical samples. Since the sample size wasn't huge, I didn't go with Bonferroni or other methods that might be too strict and exclude significant discoveries.
+
+Before correction, 4064 genes passed a cutoff of 0.05, and after correction with the BH method, 1337 genes passed. With a cutoff of 0.05, there were 2672 (after correction) and I considered this as excessive, so I decided to make the cutoff more strict at 0.01, as it is a generally accepted p-value for high significance. With a cutoff of 0.01, 2632 genes passed. After correction with the BH method at the same cutoff, 1795 genes remained.
+
+**Apply empirical Bayes to compute differential expression for the model**
+
+```{r}
+fit2 <- limma::eBayes(fit,trend=TRUE)
+topfit <- limma::topTable(fit2, 
+                   coef=ncol(model_design),
+                   adjust.method = "BH",
+                   number = nrow(expressionMatrix))
+topfit
+```
+
+**Table 5.** Differential expression values fitted to model
+
+**Merge gene names to topfit table**
+
+```{r}
+#merge hgnc names to topfit table
+output_hits <- merge(rownames(normalized_count_data),
+                     topfit,
+                     by.y=0,by.x=1,
+                     all.y=TRUE)
+#sort by pvalue
+output_hits <- output_hits[order(output_hits$P.Value),]
+head(output_hits)
+```
+
+**Extract the row with the highest absolute log-fold change value**
+
+```{r}
+# Find the top gene based on its absolute log-fold change value
+top_gene <- rownames(output_hits)[which.max(abs(output_hits$logFC))]
+output_hits[top_gene, "x"]
+```
+
+**What is its gene name?**
+
+```{r}
+
+# Connect to the Ensembl database
+ensembl <- biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+
+# Get the gene name for ENSG00000166710
+gene_name <- biomaRt::getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+                   filters = "ensembl_gene_id",
+                   values = "ENSG00000166710",
+                   mart = ensembl)$hgnc_symbol
+
+# Print the gene name
+cat("The gene name for ENSG00000166710 is", gene_name)
+```
+
+**How many gene pass the threshold p-value \< 0.05?**
+
+```{r}
+length(which(output_hits$P.Value < 0.05))
+```
+
+**How many genes pass the correction?**
+
+```{r}
+length(which(output_hits$adj.P.Val < 0.05))
+```
+
+### Gene count after analysis
+
+**How many gene pass the threshold p-value \< 0.01?**
+
+```{r}
+length(which(output_hits$P.Value < 0.01))
+```
+
+**How many genes pass the correction?**
+
+```{r}
+length(which(output_hits$adj.P.Val < 0.01))
+```
+
+### Volcano plot
+
+We can show the overall Volcano plot below based on the p-value cutoff.
+
+```{r}
+library(ggplot2)
+# Create a data frame with the log-fold change and p-value columns from topfit
+plot_data <- data.frame(logFC = output_hits$logFC, Pvalue = output_hits$adj.P.Val)
+
+# Add a column indicating which genes are significant
+plot_data$Significant <- ifelse(plot_data$Pvalue < 0.01, "Yes", "No")
+
+# Create the scatter plot
+volcano_plot <- ggplot2::ggplot(plot_data, aes(x = logFC, y = -log10(Pvalue), color = Significant)) + 
+  geom_point(size = 0.5) + 
+  scale_color_manual(values = c("No" = "black", "Yes" = "red")) + 
+  theme_classic() + 
+  labs(x = "log2(Fold Change)", y = "-log10(Adjusted P-value)", title = "Volcano plot based on p-value cutoff")
+
+# Display the plot
+volcano_plot
+```
+
+**Figure 3.** Volcano plot showing significant genes based on p-value cutoff
+
+### Heatmap with p-value cutoff
+
+```{r}
+top_hits <- output_hits$x[output_hits$adj.P.Val<0.01]
+```
+
+```{r}
+heatmap_matrix_tophits <- t(
+  scale(t(heatmap_matrix[
+which(rownames(heatmap_matrix) %in% top_hits),])))
+```
+
+```{r}
+if(min(heatmap_matrix_tophits) == 0){
+heatmap_col = colorRamp2(c( 0, max(heatmap_matrix_tophits)),
+                             c( "white", "red"))
+} else {
+heatmap_col = colorRamp2(c(min(heatmap_matrix_tophits), 0,
+      max(heatmap_matrix_tophits)), c("blue", "white", "red"))
+  }
+```
+
+```{r}
+current_heatmap_top_hits <- Heatmap(as.matrix(heatmap_matrix_tophits),
+                           cluster_rows = TRUE,
+                           cluster_columns = TRUE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               col=heatmap_col,
+                               show_column_names = TRUE,
+                               show_row_names = FALSE,
+                               show_heatmap_legend = TRUE,
+                               )
+current_heatmap_top_hits
+```
+
+**Figure 4.** Heatmap with p-value cutoff showing much clearer clustering
+
+### Questions
+
+-   **Calculate p-values for each of the genes in your expression set. How many genes were significantly differentially expressed? What thresholds did you use and why?**
+
+    Before correction, 4064 genes passed a cutoff of 0.05, and after correction with the BH method, 1337 genes passed. With a cutoff of 0.05, there were 2672 (after correction) and I considered this as excessive, so I decided to make the cutoff more strict at 0.01, as it is a generally accepted p-value for high significance. With a cutoff of 0.01, 2632 genes passed. After correction with the BH method at the same cutoff, 1795 genes remained.
+
+-   **Multiple hypothesis testing - correct your p-values using a multiple hypothesis correction method. Which method did you use? And Why? How many genes passed correction?**
+
+    I corrected for multiple hypotheses using the Benjamini-Hochberg method. I chose this method because it's better minimizing false positives, which is critical in clinical samples. Since the sample size wasn't huge, I didn't go with Bonferroni or other methods that might be too strict and exclude significant discoveries. After correction with the BH method at a cutoff of 0.01, 1795 genes remained.
+
+-   **Show the amount of differentially expressed genes using an MA Plot or a Volcano plot. Highlight genes of interest.**
+
+    See Figure 2. [Volcano plot]
+
+-   **Visualize your top hits using a heatmap. Do you conditions cluster together? Explain why or why not.**
+
+    See Figure 1. [Heatmap without p-value cutoffs] and Figure 2. [Heatmap with p-value cutoff]
+
+    The conditions do cluster together. This is reassuring, as it shows that the expression differences in our top hits are truly associated with the their tissue type.
+
+# Thresholded over-representation analysis
+
+With our significantly up-regulated and down-regulated set of genes, we can run a thresholded gene set enrichment analysis. A positive log Fold Change indicates an upregulation in the disease state, and a negative a downregulation in the disease state. Here we can see that we have 846 upregulated genes, and 1786 downregulated genes.
+
+**Up-regulated genes**
+
+```{r}
+length(which(output_hits$P.Value < 0.01 & output_hits$logFC > 0))
+```
+
+**Down-regulated genes**
+
+```{r}
+length(which(output_hits$P.Value < 0.01 & output_hits$logFC < 0))
+```
+
+### Threshold list
+
+```{r}
+output_hits[,"rank"] <- -log(output_hits$P.Value,base =10) * sign(output_hits$logFC)
+output_hits <- output_hits[order(output_hits$rank),]
+
+upregulated_genes <- output_hits$x[
+  which(output_hits$P.Value < 0.01 
+             & output_hits$logFC > 0)]
+downregulated_genes <- output_hits$x[
+  which(output_hits$P.Value < 0.01 
+             & output_hits$logFC < 0)]
+
+all_genes <- output_hits$x[
+  which(output_hits$P.Value < 0.01)]
+
+write.table(x=upregulated_genes,
+            file=file.path("upregulated_genes.txt"),sep = "\t",
+            row.names = FALSE,col.names = FALSE,quote = FALSE)
+write.table(x=downregulated_genes,
+            file=file.path("downregulated_genes.txt"),sep = "\t",
+            row.names = FALSE,col.names = FALSE,quote = FALSE)
+write.table(x=all_genes,
+            file=file.path("all_genes.txt"),sep = "\t",
+            row.names = FALSE,col.names = FALSE,quote = FALSE)
+```
+
+### Enrichment analysis
+
+I used gProfiler for the thresholded enrichment analysis. This was because it is a common tool, drawing from multiple annotation sources mentioned in class (ex. KEGG, GO, Reactome) and it has a comfortable R interface. This draws the latest versions from each annotation source separately.
+
+### All genes
+
+```{r}
+enrichment_all <- gprofiler2::gost(all_genes, ordered_query = TRUE)
+significant_pathways_all <- enrichment_all$result$term_name[order(enrichment_all$result$p_value)]
+head(significant_pathways_all)
+```
+
+```{r}
+head(enrichment_all$result$term_id[order(enrichment_all$result$p_value)], 5)
+```
+
+```{r}
+length(enrichment_all$result$term_name[which(enrichment_all$result$p_value < 0.01)])
+```
+
+```{r}
+p0 = gprofiler2::gostplot(enrichment_all, interactive = FALSE)
+p0 <- p0 + ggtitle("Enriched terms with annotation")
+gprofiler2::publish_gostplot(p0, highlight_terms = c("GO:0002376", "GO:0006955",
+					     "GO:0002250", "GO:0002682","GO:0045321"))
+```
+
+**Figure 5.** Visualization of enrichment analysis of all genes using gostplot and annotation of top 5 terms.
+
+### Up-regulated genes
+
+```{r}
+enrichment_up <- gprofiler2::gost(upregulated_genes, ordered_query = TRUE)
+significant_pathways_up <- enrichment_up$result$term_name[order(enrichment_up$result$p_value)]
+head(significant_pathways_up)
+```
+
+```{r}
+head(enrichment_up$result$term_id[order(enrichment_up$result$p_value)], 5)
+```
+
+```{r}
+length(enrichment_up$result$term_name[which(enrichment_up$result$p_value < 0.01)])
+```
+
+```{r}
+p1 = gprofiler2::gostplot(enrichment_up, interactive = FALSE)
+p1 <- p1 + ggtitle("Enriched up-regulated terms with annotation")
+gprofiler2::publish_gostplot(p1, highlight_terms = c("GO:0005576", "GO:0008544",
+					     "GO:0005615", "GO:0043588","GO:1903561"))
+```
+
+**Figure 6.** Visualization of enrichment analysis of up-regulated genes using gostplot and annotation of top 5 terms.
+
+### Down-regulated genes
+
+```{r}
+enrichment_dwn <- gprofiler2::gost(downregulated_genes)
+significant_pathways_dwn <- enrichment_dwn$result$term_name[order(enrichment_dwn$result$p_value)]
+head(significant_pathways_dwn)
+```
+
+```{r}
+head(enrichment_dwn$result$term_id[order(enrichment_dwn$result$p_value)], 5)
+```
+
+```{r}
+length(enrichment_dwn$result$term_name[which(enrichment_dwn$result$p_value < 0.01)])
+```
+
+```{r}
+p2 = gprofiler2::gostplot(enrichment_dwn, interactive = FALSE)
+p2 <- p2 + ggtitle("Enriched down-regulated terms with annotation")
+gprofiler2::publish_gostplot(p2, highlight_terms = c("GO:0002376", "GO:0006955",
+					     "REAC:R-HSA-168256", "GO:0002250", "GO:0002682"))
+```
+
+**Figure 7.** Visualization of enrichment analysis of down-regulated genes using gostplot and annotation of top 5 terms.
+
+### Questions
+
+1.  Which method did you choose and why?
+
+    -   The decision to use GProfiler was based on its compatibility with the HGNC symbols in the dataset and its up-to-date nature. Additionally, GProfiler offers user-friendly tools for visualization through both its web server and R library, making it easy to navigate and analyze the results.
+
+2.  How many genesets were returned with what thresholds?
+
+    -   For upregulated genes, the domain size was 445.
+    -   For downregualted genes, the domain size was 1465.
+
+3.  Run the analysis using the up-regulated set of genes, and the down-regulated set of genes separately. How do these results compare to using the whole list (i.e all differentially expressed genes together vs. the up-regulated and down regulated differentially expressed genes separately)?
+
+    -   Up-regulated terms: The terms "extracellular region", "extracellular space", "extracellular vesicle", and "extracellular organelle" are all related to cellular components and structures that are located outside of the cell membrane, in the extracellular space. The terms "epidermis development" and "skin development" are related to the biological processes that are involved in the development and maintenance of the epidermis and skin tissues, respectively. Overall, these terms are all related to extracellular structures and biological processes that play important roles in various aspects of organismal development, homeostasis, and function.
+    -   Down-regulated terms: The terms "immune system process", "immune response", "immune system", "adaptive immune response", "regulation of immune system process", and "leukocyte activation" all pertain to the immune system, which is responsible for protecting the body against pathogens like viruses and bacteria. The "immune system" is a complex network of cells, tissues, and organs that work together to identify and eliminate foreign invaders while maintaining tolerance to self. "Immune system process" refers to any process involved in the immune system's function, such as antigen presentation, lymphocyte activation, and cytokine signaling. "Immune response" specifically refers to the immune system's recognition and response to a pathogen or foreign substance. "Adaptive immune response" is triggered by exposure to a particular pathogen or antigen, resulting in the production of antigen-specific antibodies and immune memory. "Regulation of immune system process" involves various mechanisms that control and modulate the immune system, including negative feedback loops and regulatory T cells. "Leukocyte activation" is the process by which white blood cells are activated to respond to a pathogen or foreign substance, which involves a complex interplay of signaling pathways and cellular interactions.
+    -   Overall, the enriched terms which include the whole list has very little difference with the down-regulated terms, where each term relates to the immune system.
+
+# Interpretation
+
+### Questions
+
+1.  Do the over-representation results support conclusions or mechanism discussed in the original paper?
+
+    The GProfiler results confirm the dysregulation of immune processes in the skin of PLWH (HIVSeq cohort) discussed in the study. The downregulation of CXCR3 expression and Th1-like T cell-related genes, which are important for anti-viral immunity, suggests a shift towards an anti-inflammatory and tolerogenic environment that may promote cancer. Additionally, the overexpression of genes involved in the regulation of immune effector processes, natural killer cell-mediated immunity, and IL-12 production suggests a tolerogenic or suppressive T helper cell phenotype, further supporting the notion of immune dysregulation in the skin of PLWH.
+
+    Regarding the upregulated genes "epidermis development," "tissue development," "skin development," "extracellular region," "extracellular space," and "extracellular exosome," the study does not directly discuss their role in the dysregulation of the immune system in PLWH skin. However, these genes may be related to the development and maintenance of the skin microenvironment that supports Trm cell function. The study highlights the importance of Trm cells in promoting tissue and immune homeostasis in the skin, protecting against microbes and cancer, and playing a role in communication with other cells in the skin microenvironment.
+
+    Overall, the GProfiler results provide further evidence of immune dysregulation in the skin of PLWH, with a shift towards a tolerogenic and suppressive immune phenotype. While the study does not directly discuss the upregulated genes in relation to this dysregulation, they may play a role in the development and maintenance of the skin microenvironment that supports Trm cell function, which is crucial for tissue and immune homeostasis in the skin.
+
+2.  Can you find evidence, i.e. publications, to support some of the results that you see. How does this evidence support your results.
+
+    In summary, the gene expressions common to support the results from the GProfiler analysis suggest a dysregulation of immune processes in the skin of PLWH, with a shift towards a tolerogenic and suppressive immune phenotype. Down-regulation of CXCR3 expression and Th1-like T cell-related genes indicate a decreased capacity for anti-viral immunity, while up-regulated genes related to skin and tissue development may contribute to the maintenance of the skin microenvironment that supports Trm cell function. In general, these findings provide insights into the immune dysregulation in the skin of PLWH and suggest potential targets for therapeutic intervention.
+
+# References
+
+1.  Geistlinger L, Csaba G, Santarelli M, Ramos M, Schiffer L, Turaga N, Law C,Davis S, Carey V, Morgan M, Zimmer R, Waldron L. Toward a gold standard for benchmarking gene set enrichment analysis. [Brief Bioinform. 2020 Feb 6 ](https://www.ncbi.nlm.nih.gov/pubmed/32026945)
+2.  Saluzzo S, Pandey RV, Gail LM, Dingelmaier-Hovorka R et al. Delayed antiretroviral therapy in HIV-infected individuals leads to irreversible depletion of skin- and mucosa-resident memory T cells. Immunity 2021 Dec 14;54(12):2842-2858.e5. PMID: [34813775](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/34813775 "Link to PubMed record")
+3.  Chimbetete, T., Buck, C., Choshi, P., Selim, R., Pedretti, S., Divito, S. J., ... Peter, J. (2023). HIV-Associated Immune Dysregulation in the Skin: A Crucible for Exaggerated Inflammation and Hypersensitivity. Journal of Investigative Dermatology, 143(3), 362--373. <doi:10.1016/j.jid.2022.07.035>
+4.  Morgan M (2023). \_BiocManager: Access the Bioconductor Project Package Repository\_. R package version 1.30.20, <https://CRAN.R-project.org/package=BiocManager>.
+5.  Yihui Xie (2023). knitr: A General-Purpose Package for Dynamic Report Generation in R. R package version 1.42.
+6.  Gu, Z. (2016) Complex heatmaps reveal patterns and correlations in multidimensional genomic data. Bioinformatics.
+7.  Gu, Z. (2014) circlize implements and enhances circular visualization in R. Bioinformatics.
+8.  Mapping identifiers for the integration of genomic datasets with the R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+9.  Zhu H (2021). \_kableExtra: Construct Complex Table with 'kable' and Pipe Syntax\_. R package version 1.3.4, <https://CRAN.R-project.org/package=kableExtra>.
+10. Kolberg L, Raudvere U, Kuzmin I, Vilo J, Peterson H (2020). "gprofiler2- an R package for gene list functional enrichment analysis and namespace conversion toolset g:Profiler." \_F1000Research\_, \*9 (ELIXIR)\*(709). R package version 0.2.1.
+11. Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., and Smyth, G.K. (2015). limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47.
+12. H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+13. Orchestrating high-throughput genomic analysis with Bioconductor. W. Huber, V.J. Carey, R. Gentleman, ..., M. Morgan Nature Methods, 2015:12, 115.
+14. Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics 26, 139-140
