@@ -35,10 +35,6 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 
 options(repos = c(CRAN = "https://cran.r-project.org"))
 
-if (!requireNamespace("knitr", quietly = TRUE)) {
-    install.packages("knitr")}
-library(knitr)
-
 if (!requireNamespace("ComplexHeatmap", quietly = TRUE)) {
 BiocManager::install("ComplexHeatmap")}
 library("ComplexHeatmap")
@@ -49,9 +45,6 @@ library(circlize)
 
 if (!requireNamespace("biomaRt", quietly = TRUE)) {
 library(biomaRt)}
-
-if (!requireNamespace("kableExtra", quietly = TRUE)) {
-library(kableExtra)}
 
 if (!requireNamespace("gprofiler2", quietly = TRUE)) {
 library(gprofiler2)}
