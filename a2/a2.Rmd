@@ -44,22 +44,24 @@ if (!requireNamespace("circlize", quietly = TRUE)) {
 library(circlize)
 
 if (!requireNamespace("biomaRt", quietly = TRUE)) {
-library(biomaRt)}
+  install.packages("biomaRt")}
+library(biomaRt)
 
 if (!requireNamespace("gprofiler2", quietly = TRUE)) {
-library(gprofiler2)}
+  install.packages("gprofiler2")}
+library(gprofiler2)
 
 if (!requireNamespace("limma", quietly = TRUE)) {
-library(limma)}
+  install.packages("limma")}
+library(limma)
 
 if (!requireNamespace("ggplot2", quietly = TRUE)) {
-library(ggplot2)}
+  install.packages("ggplot2")}
+library(ggplot2)
 
 if (!requireNamespace("Biobase", quietly = TRUE)) {
-library(Biobase)}
-
-if (!requireNamespace("edgeR", quietly = TRUE)) {
-library(edgeR)}
+  install.packages("Biobase")}
+library(Biobase)
 ```
 
 **Load normalized data**
@@ -67,8 +69,8 @@ library(edgeR)}
 Data from Assignment 1 is saved as CSV file and included in Assignment 2 directory.
 
 ```{r}
-normalized_count_data <- read.csv("normalized_data.csv")
-normalized_count_data
+normalized_count_data <- read.csv(file.path(getwd(), "normalized_data.csv"))
+normalized_count_data[,2:19]
 ```
 
 **Table 1.** Processed count data used for the current analysis. The data is composed of 12,565 genes and 16 samples, where each gene is identified by a unique HUGO symbol and Ensembl ID.
@@ -500,13 +502,10 @@ gprofiler2::publish_gostplot(p2, highlight_terms = c("GO:0002376", "GO:0006955",
 2.  Saluzzo S, Pandey RV, Gail LM, Dingelmaier-Hovorka R et al. Delayed antiretroviral therapy in HIV-infected individuals leads to irreversible depletion of skin- and mucosa-resident memory T cells. Immunity 2021 Dec 14;54(12):2842-2858.e5. PMID: [34813775](https://0-www-ncbi-nlm-nih-gov.brum.beds.ac.uk/pubmed/34813775 "Link to PubMed record")
 3.  Chimbetete, T., Buck, C., Choshi, P., Selim, R., Pedretti, S., Divito, S. J., ... Peter, J. (2023). HIV-Associated Immune Dysregulation in the Skin: A Crucible for Exaggerated Inflammation and Hypersensitivity. Journal of Investigative Dermatology, 143(3), 362--373. <doi:10.1016/j.jid.2022.07.035>
 4.  Morgan M (2023). \_BiocManager: Access the Bioconductor Project Package Repository\_. R package version 1.30.20, <https://CRAN.R-project.org/package=BiocManager>.
-5.  Yihui Xie (2023). knitr: A General-Purpose Package for Dynamic Report Generation in R. R package version 1.42.
-6.  Gu, Z. (2016) Complex heatmaps reveal patterns and correlations in multidimensional genomic data. Bioinformatics.
-7.  Gu, Z. (2014) circlize implements and enhances circular visualization in R. Bioinformatics.
-8.  Mapping identifiers for the integration of genomic datasets with the R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
-9.  Zhu H (2021). \_kableExtra: Construct Complex Table with 'kable' and Pipe Syntax\_. R package version 1.3.4, <https://CRAN.R-project.org/package=kableExtra>.
-10. Kolberg L, Raudvere U, Kuzmin I, Vilo J, Peterson H (2020). "gprofiler2- an R package for gene list functional enrichment analysis and namespace conversion toolset g:Profiler." \_F1000Research\_, \*9 (ELIXIR)\*(709). R package version 0.2.1.
-11. Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., and Smyth, G.K. (2015). limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47.
-12. H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
-13. Orchestrating high-throughput genomic analysis with Bioconductor. W. Huber, V.J. Carey, R. Gentleman, ..., M. Morgan Nature Methods, 2015:12, 115.
-14. Robinson MD, McCarthy DJ and Smyth GK (2010). edgeR: a Bioconductor package for differential expression analysis of digital gene expression data. Bioinformatics 26, 139-140
+5.  Gu, Z. (2016) Complex heatmaps reveal patterns and correlations in multidimensional genomic data. Bioinformatics.
+6.  Gu, Z. (2014) circlize implements and enhances circular visualization in R. Bioinformatics.
+7.  Mapping identifiers for the integration of genomic datasets with the R/Bioconductor package biomaRt. Steffen Durinck, Paul T. Spellman, Ewan Birney and Wolfgang Huber, Nature Protocols 4, 1184-1191 (2009).
+8. Kolberg L, Raudvere U, Kuzmin I, Vilo J, Peterson H (2020). "gprofiler2- an R package for gene list functional enrichment analysis and namespace conversion toolset g:Profiler." \_F1000Research\_, \*9 (ELIXIR)\*(709). R package version 0.2.1.
+9. Ritchie, M.E., Phipson, B., Wu, D., Hu, Y., Law, C.W., Shi, W., and Smyth, G.K. (2015). limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research 43(7), e47.
+10. H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York, 2016.
+11. Orchestrating high-throughput genomic analysis with Bioconductor. W. Huber, V.J. Carey, R. Gentleman, ..., M. Morgan Nature Methods, 2015:12, 115.
